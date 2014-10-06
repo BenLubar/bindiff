@@ -44,20 +44,14 @@ func Diff(old, new []byte, granularity int) (patch []byte) {
 // Forward retrieves the second argument to Diff given the first argument and its output.
 func Forward(old, patch []byte) (new []byte, err error) {
 	return doPatch(old, patch, func(data []byte, a, b int, del, ins []byte) ([]byte, error) {
-		if len(data) < a+len(del) {
-			return data, ErrCorrupt
-		}
-		return append(data[:a], append(append([]byte{}, ins...), data[a+len(del):]...)...), nil
+		return splice(data, a, len(del), ins)
 	})
 }
 
 // Reverse retrieves the first argument to Diff given the second argument and its output.
 func Reverse(new, patch []byte) (old []byte, err error) {
 	return doPatch(new, patch, func(data []byte, a, b int, del, ins []byte) ([]byte, error) {
-		if len(data) < b+len(ins) {
-			return data, ErrCorrupt
-		}
-		return append(data[:b], append(append([]byte{}, del...), data[b+len(ins):]...)...), nil
+		return splice(data, b, len(ins), del)
 	})
 }
 
@@ -106,6 +100,19 @@ func doPatch(x, patch []byte, f func(data []byte, a, b int, del, ins []byte) ([]
 	}
 
 	return
+}
+
+func splice(base []byte, anchor, del int, ins []byte) ([]byte, error) {
+	if anchor+del > len(base) {
+		return base, ErrCorrupt
+	}
+	l := len(base)
+	if del < len(ins) {
+		base = append(base, make([]byte, len(ins)-del)...)
+	}
+	copy(base[anchor+len(ins):], base[anchor+del:])
+	copy(base[anchor:], ins)
+	return base[:l+len(ins)-del], nil
 }
 
 func writeUvarint(buf []byte, i int) []byte {
